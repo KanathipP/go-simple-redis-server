@@ -1,6 +1,7 @@
 {
     "go.testFlags": [
-        "-v"
+        "-v",
+        "-count=1"
     ],
     "discord.enabled": true
 }
