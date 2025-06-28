@@ -1,57 +1,68 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"goredis/client"
 	"log"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/tidwall/resp"
 )
 
-func TestServerWithMultiClients(t *testing.T) {
-	server := NewServer(Config{})
+func TestOfficialRedisClient(t *testing.T) {
+	listenAddr := ":5002"
+	server := NewServer(Config{
+		ListenAddr: listenAddr,
+	})
+
 	go func() {
 		log.Fatal(server.Start())
 	}()
 
 	time.Sleep(time.Second)
 
-	nClients := 10
-	var wg sync.WaitGroup
-	wg.Add(nClients)
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("localhost%s", listenAddr),
+		Password: "",
+		DB:       0,
+	})
 
-	for i := 0; i < nClients; i++ {
-		go func(it int) {
-			c, err := client.New("localhost:5001")
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			defer c.Close()
-
-			key := fmt.Sprintf("client_foo_%d", i)
-			set_val := fmt.Sprintf("client_bar_%d", i)
-
-			if err := c.Set(context.Background(), key, set_val); err != nil {
-				log.Fatal(err)
-			}
-
-			get_val, err := c.Get(context.Background(), key)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("client %d got this value back%s\n", i, get_val)
-			wg.Done()
-		}(i)
+	testCases := map[string]string{
+		"foo":  "bar",
+		"your": "mom",
+		"step": "dad",
+		"im":   "stuck",
 	}
 
-	wg.Wait()
+	for key, val := range testCases {
+		err := rdb.Set(context.Background(), key, val, 0).Err()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	time.Sleep(time.Second)
+		newVal, err := rdb.Get(context.Background(), key).Result()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if len(server.peers) != 0 {
-		t.Fatalf("expected 0 peers but got %d", len(server.peers))
+		if val != newVal {
+			t.Fatalf("expected %s but got %s", val, newVal)
+		}
 	}
+}
+
+func TestFooBar(t *testing.T) {
+	buf := &bytes.Buffer{}
+	rw := resp.NewWriter(buf)
+	rw.WriteString("OK")
+	fmt.Println(buf.String())
+	in := map[string]string{
+		"first":  "1",
+		"second": "2",
+	}
+	out := respWriteMap(in)
+	fmt.Println(string(out))
 }
